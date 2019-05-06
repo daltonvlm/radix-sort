@@ -16,11 +16,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <libgen.h>
 #include <time.h>
 
-#define MAX_N 20
-#define MAX_D 10
-#define BASE 10
+#define MAXVAL 	10
+#define BASE 	10
 
 /* Nós da fila a serem alocados dinamicamente */
 typedef struct numero {
@@ -35,9 +36,11 @@ void libera_fila(Numero *fila[]);
 void mostra_numeros(char **numeros, size_t n);
 void radix_sort(Numero *fila[], char **numeros, size_t n, size_t d);
 
-int main(void)
+void parseargs(int argc, char **argv, size_t *n, size_t *d);
+
+int main(int argc, char **argv)
 {
-	int n, d;
+	size_t n, d;
 	char **numeros;			/* ponteiro para sequência de números em 
 							   formato de string */
 	Numero *fila[BASE];
@@ -46,8 +49,9 @@ int main(void)
 	srand(time(NULL));
 
 	/* +1 para garantir que nem n, nem d terão 0 como valor */
-	n = rand() % MAX_N + 1;
-	d = rand() % MAX_D + 1;
+	n = rand() % MAXVAL + 1;
+	d = rand() % MAXVAL + 1;
+	parseargs(argc, argv, &n, &d);
 	numeros = gera_numeros(n, d);
 
 	/* Define como NULL o valor inicial de cada elemento de 'fila' */
@@ -189,4 +193,51 @@ void radix_sort(Numero *fila[], char **numeros, size_t n, size_t d)
 		libera_fila(fila);
 		radix_sort(fila, numeros, n, d);
 	}
+}
+
+static void usage(char *err, ...);
+
+char *progname;
+
+void parseargs(int argc, char **argv, size_t *n, size_t *d)
+{
+
+	progname = basename(*argv);
+	while (--argc && '-' == **++argv)
+		switch (*++*argv) {
+			case 'n':
+				*n = atoi(*argv + 1);
+				break;
+			case 'd':
+				*d = atoi(*argv + 1);
+				break;
+			default:
+				usage("parseargs: argumento invalido '%c'\n", **argv);
+				break;
+		}
+	if (argc)
+		usage("");
+}
+
+static void usage(char *err, ...)
+{
+	va_list va;
+
+	if (*err) {
+		va_start(va, err);
+		vfprintf(stderr, err, va);
+		va_end(va);
+	}
+
+	fprintf(stderr,
+
+			"Uso: %s [-n<valor>] [-d<valor>]\n\n"
+
+			"	-n	Quantidade de numeros\n"
+			"	-d	Quantidade de digitos\n\n"
+
+			"Se nao especificados, n e d variam entre 1 e %d.\n", 
+			progname, MAXVAL
+	);
+	exit(EXIT_FAILURE);
 }
