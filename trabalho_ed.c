@@ -16,134 +16,165 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <stdarg.h>
 #include <libgen.h>
-#include <time.h>
+#include <ctype.h>
 
-#define MAXVAL 	10
-#define BASE 	10
+#define STD_N 	5
+#define STD_D 	10
+#define STD_B 	10
+#define MAX_B	(10 + 'z' - 'a' + 1)
 
-/* Nós da fila a serem alocados dinamicamente */
 typedef struct numero {
 	char *numero;
 	struct numero *prox;
 } Numero;
 
-char **gera_numeros(size_t n, size_t d);
-void libera_numeros(char **numeros, size_t n);
-void inicializa_fila(Numero *fila[]);
-void libera_fila(Numero *fila[]);
-void mostra_numeros(char **numeros, size_t n);
-void radix_sort(Numero *fila[], char **numeros, size_t n, size_t d);
+char *progname;
 
-void parseargs(int argc, char **argv, size_t *n, size_t *d);
+char **gera_numeros(size_t n, size_t d, size_t b);
+void libera_numeros(size_t n, char **numeros);
+Numero **gera_fila(size_t b);
+void libera_fila(size_t b, Numero **fila);
+void radix(size_t b, Numero **fila, size_t n, size_t d, char **numeros);
+void parse_args(int argc, char **argv, size_t *n, size_t *d, size_t *b);
+void print_numeros(size_t n, char **numeros);
 
 int main(int argc, char **argv)
 {
-	size_t n, d;
-	char **numeros;			/* ponteiro para sequência de números em 
-							   formato de string */
-	Numero *fila[BASE];
+	size_t n, d, b;
+	char **numeros;
+	Numero **fila;
 
-	/* Define valor aleatório para rand() */
 	srand(time(NULL));
-
-	/* +1 para garantir que nem n, nem d terão 0 como valor */
-	n = rand() % MAXVAL + 1;
-	d = rand() % MAXVAL + 1;
-	parseargs(argc, argv, &n, &d);
-	numeros = gera_numeros(n, d);
-
-	/* Define como NULL o valor inicial de cada elemento de 'fila' */
-	inicializa_fila(fila);
-
-	mostra_numeros(numeros, n);
-		
-	/* Ordena os valores em 'numeros' */
-	radix_sort(fila, numeros, n, d);
-
-	/* Libera elementos alocados dinamicamente */
-	libera_numeros(numeros, n);
-	libera_fila(fila);
+	progname = basename(*argv);
+	parse_args(argc, argv, &n, &d, &b);
+	numeros = gera_numeros(n, d, b);
+	fila = gera_fila(b);
+	print_numeros(n, numeros);
+	radix(b, fila, n, d, numeros);
+	libera_numeros(n, numeros);
+	libera_fila(b, fila);
 
 	return EXIT_SUCCESS;
 }
 
 static void *aloca(size_t n)
 {
-	void *p = malloc(n);
+	void *p;
 
-	if (!p) {
+	if (!(p = malloc(n))) {
 		perror("aloca");
 		exit(EXIT_FAILURE);
 	}
 	return p;
 }
 
-static char *gera_numero(size_t d)
+static char gera_digito(size_t b)
+{
+	static char *digitos = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+	return digitos[rand() % b];
+}
+
+static char *gera_numero(size_t d, size_t b)
 {
 	char *p, *numero;
 
 	p = numero = (char *) aloca((d + 1) * sizeof(char));
 	while (d--)
-		*p++ = '0' + rand() % BASE;
+		*p++ = gera_digito(b);
 	*p = '\0';
 	return numero;
 }
 
-char **gera_numeros(size_t n, size_t d)
+char **gera_numeros(size_t n, size_t d, size_t b)
 {
 	char **p, **numeros;
 
 	p = numeros = (char **) aloca(n * sizeof(char *));
 	while (n--)
-		*p++ = gera_numero(d);
+		*p++ = gera_numero(d, b);
 	return numeros;
 }
 
-void libera_numeros(char **numeros, size_t n)
+void libera_numeros(size_t n, char **numeros)
 {
+	char **p;
+
+	p = numeros;
 	while (n--)
-		free(*numeros++);
+		free(*p++);
+	free(numeros);
 }
 
-void libera_fila(Numero *fila[])
+Numero **gera_fila(size_t b)
 {
-	int i;
-	Numero *p, *t;
+	Numero **p, **fila;
 
-	/* Libera apenas os nós, não as informações */
-	for (i = 0; i < BASE; i++) {
-		p = fila[i];
+	p = fila = (Numero **) aloca(b * sizeof(Numero *));
+	while (b--)
+		*p++ = NULL;
+	return fila;
+}
+
+static void zera_fila(size_t b, Numero **fila)
+{
+	Numero *p, *tmp;
+
+	for (p = *fila; b--; fila++) {
 		while (p) {
-			t = p;
+			tmp = p;
 			p = p->prox;
-			free(t);
+			free(tmp);
 		}
-		fila[i] = NULL;
+		*fila = NULL;
 	}
 }
 
-void inicializa_fila(Numero *fila[])
+void libera_fila(size_t b, Numero **fila)
 {
-	int i;
-
-	for (i = 0; i < BASE; i++)
-		fila[i] = NULL;
+	zera_fila(b, fila);
+	free(fila);
 }
 
-static int pega_indice(char *number, size_t d)
+static size_t pega_indice(char c)
 {
-	return number[d] - '0';
+	if (isalpha(c))
+		return 10 + c - 'a';
+	return c - '0';
 }
 
-static void mostra_fila(Numero *fila[])
+static void insere_fila(Numero **fila, size_t d, char *numero)
+{
+	Numero **p;
+	size_t i;
+
+	i = pega_indice(numero[d]);
+	p = &fila[i];
+	while (*p)
+		p = &(*p)->prox;
+	*p = (Numero *) aloca(sizeof(Numero));
+	(*p)->numero = numero;
+	(*p)->prox = NULL;
+}
+
+void print_numeros(size_t n, char **numeros)
+{
+	printf("Tabela:");
+	while (n--)
+		printf("  %s", *numeros++);
+	puts("");
+}
+
+static void print_fila(size_t b, Numero **fila)
 {
 	int i;
 	Numero *p;
 
-	for (i = 0; i < BASE; i++) {
-		printf("fila%d:\t", i);
+	for (i = 0; i < b; i++) {
+		printf("fila%d: ", i);
 		for (p = fila[i]; p; p = p->prox)
 			printf(" %s%c", p->numero, p->prox ? ',' : '\0');
 		puts("");
@@ -151,93 +182,100 @@ static void mostra_fila(Numero *fila[])
 	puts("");
 }
 
-void mostra_numeros(char **numeros, size_t n)
+void radix(size_t b, Numero **fila, size_t n, size_t d,
+		char **numeros)
 {
-	int i;
-
-	printf("Tabela:");
-	for (i = 0; i < n; i++)
-		printf("  %s", numeros[i]);
-	puts("");
-}
-
-static Numero *cria_numero(char *numero)
-{
-	Numero *p = (Numero *) aloca(sizeof(Numero));
-	p->numero = numero;
-	p->prox = NULL;
-	return p;
-}
-
-void radix_sort(Numero *fila[], char **numeros, size_t n, size_t d)
-{
-	int pos, i, j;
-	static int it = 0;
-	Numero **p;
+	int i, j;
+	static it = 0;
+	Numero *p;
 
 	if (d--) {
 		it++;
 		printf("\nIteracao %d: %da distribuicao\n\n", it, it);
-		for (i = 0; i < n; i++) {
-			pos = pega_indice(numeros[i], d);
-			for (p = &fila[pos]; *p; p = &(*p)->prox)
-				;
-			*p = cria_numero(numeros[i]);
-		}
-		pos = 0;
-		for (i = 0; i < BASE; i++)
-			for (p = &fila[i]; *p; p = &(*p)->prox)
-				numeros[pos++] = (*p)->numero;
-		mostra_fila(fila);
-		mostra_numeros(numeros, n);
-		libera_fila(fila);
-		radix_sort(fila, numeros, n, d);
+
+		for (i = 0; i < n; i++)
+			insere_fila(fila, d, numeros[i]);
+		i = 0;
+		for (j = 0; j < b; j++)
+			for (p = fila[j]; p; p = p->prox)
+				numeros[i++] = p->numero;
+
+		print_fila(b, fila);
+		print_numeros(n, numeros);
+		zera_fila(b, fila);
+		radix(b, fila, n, d, numeros);
 	}
 }
 
-static void usage(char *err, ...);
-
-char *progname;
-
-void parseargs(int argc, char **argv, size_t *n, size_t *d)
+static void usage(char *msg, ...)
 {
+	va_list ap;
+	
+	if (msg) {
+		va_start(ap, msg);
+		vfprintf(stderr, msg, ap);
+		va_end(ap);
+	}
+	printf(
+		"\n"
+		"Uso: %s [OPCAO<VALOR>]\n\n"
+		""
+		""
+		"OPCOES:\n\n"
+		""
+		""
+		"	-n	Quantidade de numeros a serem ordenados\n"
+		"	-d	Quantidade de digitos em cada numero\n"
+		"	-b	Base de representacao dos numeros\n\n"
+		""
+		""
+		"Os valores padroes para cada opcao sao:\n\n"
+		""
+		""
+		"	-n	%d\n"
+		"	-d	%d\n"
+		"	-b	%d\n\n",
+		progname, STD_N, STD_D, STD_B);
 
-	progname = basename(*argv);
+	exit(EXIT_FAILURE);
+}
+
+void parse_args(int argc, char **argv, size_t *n, size_t *d, size_t *b)
+{
+	int tmp;
+
+	/* n e d minimos devem ser 1 */
+	*n = 1 + rand() % STD_N;
+	*d = 1 + rand() % STD_D;
+	/* base minima deve ser 2, e maxima, 36 */
+	*b = 2 + rand() % (STD_B - 1);
+
 	while (--argc && '-' == **++argv)
 		switch (*++*argv) {
 			case 'n':
-				*n = atoi(*argv + 1);
+				tmp = atoi(*argv + 1);
+				if (!tmp)
+					usage("parseargs: n e d minimos devem ser 1\n");
+				*n = tmp;
 				break;
 			case 'd':
-				*d = atoi(*argv + 1);
+				tmp = atoi(*argv + 1);
+				if (!tmp)
+					usage("parseargs: n e d minimos devem ser 1\n");
+				*d = tmp;
+				break;
+			case 'b':
+				tmp = atoi(*argv + 1);
+				if (tmp < 2 || tmp > MAX_B)
+					usage("parseargs: base precisa estar em [2, %d]\n",
+							MAX_B);
+				*b = tmp;
 				break;
 			default:
-				usage("parseargs: argumento invalido '%c'\n", **argv);
+				usage("parseargs: argumento invalido '%c'\n",
+						**argv);
 				break;
 		}
 	if (argc)
-		usage("");
-}
-
-static void usage(char *err, ...)
-{
-	va_list va;
-
-	if (*err) {
-		va_start(va, err);
-		vfprintf(stderr, err, va);
-		va_end(va);
-	}
-
-	fprintf(stderr,
-
-			"Uso: %s [-n<valor>] [-d<valor>]\n\n"
-
-			"	-n	Quantidade de numeros\n"
-			"	-d	Quantidade de digitos\n\n"
-
-			"Se nao especificados, n e d variam entre 1 e %d.\n", 
-			progname, MAXVAL
-	);
-	exit(EXIT_FAILURE);
+		usage(NULL);
 }
