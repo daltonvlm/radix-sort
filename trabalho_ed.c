@@ -31,21 +31,26 @@ typedef struct numero {
 	struct numero *prox;
 } Numero;
 
+typedef struct fila {
+	Numero *prim;
+	Numero *ult;
+} Fila;
+
 char *progname;
 
 char **gera_numeros(size_t n, size_t d, size_t b);
 void libera_numeros(size_t n, char **numeros);
-Numero **gera_fila(size_t b);
-void libera_fila(size_t b, Numero **fila);
-void radix(size_t b, Numero **fila, size_t n, size_t d, char **numeros);
-void parse_args(int argc, char **argv, size_t *n, size_t *d, size_t *b);
 void print_numeros(size_t n, char **numeros);
+Fila *gera_fila(size_t b);
+void libera_fila(size_t b, Fila *fila);
+void radix(size_t b, Fila *fila, size_t n, size_t d, char **numeros);
+void parse_args(int argc, char **argv, size_t *n, size_t *d, size_t *b);
 
 int main(int argc, char **argv)
 {
 	size_t n, d, b;
 	char **numeros;
-	Numero **fila;
+	Fila *fila;
 
 	srand(time(NULL));
 	progname = basename(*argv);
@@ -109,33 +114,26 @@ void libera_numeros(size_t n, char **numeros)
 	free(numeros);
 }
 
-Numero **gera_fila(size_t b)
+Fila *gera_fila(size_t b)
 {
-	Numero **p, **fila;
+	Fila *fila;
 
-	p = fila = (Numero **) aloca(b * sizeof(Numero *));
+	fila = (Fila *) aloca(b * sizeof(Fila));
 	while (b--)
-		*p++ = NULL;
+		fila[b].prim = fila[b].ult = NULL;
 	return fila;
 }
 
-static void zera_fila(size_t b, Numero **fila)
+void libera_fila(size_t b, Fila *fila)
 {
-	Numero *p, *tmp;
+	Numero *tmp;
 
-	for (p = *fila; b--; fila++) {
-		while (p) {
-			tmp = p;
-			p = p->prox;
+	while (b--) {
+		while (tmp = fila[b].prim) {
+			fila[b].prim = tmp->prox;
 			free(tmp);
 		}
-		*fila = NULL;
 	}
-}
-
-void libera_fila(size_t b, Numero **fila)
-{
-	zera_fila(b, fila);
 	free(fila);
 }
 
@@ -146,18 +144,38 @@ static size_t pega_indice(char c)
 	return c - '0';
 }
 
-static void insere_fila(Numero **fila, size_t d, char *numero)
+static void insere_fila(Fila *fila, size_t n, size_t d, char **numeros)
 {
-	Numero **p;
+	Numero *p;
 	size_t i;
 
-	i = pega_indice(numero[d]);
-	p = &fila[i];
-	while (*p)
-		p = &(*p)->prox;
-	*p = (Numero *) aloca(sizeof(Numero));
-	(*p)->numero = numero;
-	(*p)->prox = NULL;
+	for (; n--; numeros++) {
+		i = pega_indice((*numeros)[d]);
+
+		p = (Numero *) aloca(sizeof(Numero));
+		p->numero = *numeros;
+		p->prox = NULL;
+
+		if (fila[i].prim)
+			fila[i].ult->prox = p;
+		else
+			fila[i].prim = p;
+		fila[i].ult = p;
+	}
+}
+
+static void retira_fila(size_t b, Fila *fila, char **numeros)
+{
+	Numero *tmp;
+
+	for (; b--; fila++) {
+		while (tmp = (*fila).prim) {
+			(*fila).prim = tmp->prox;
+			*numeros++ = tmp->numero;
+			free(tmp);
+		}
+		(*fila).ult = NULL;
+	}
 }
 
 void print_numeros(size_t n, char **numeros)
@@ -168,24 +186,23 @@ void print_numeros(size_t n, char **numeros)
 	puts("");
 }
 
-static void print_fila(size_t b, Numero **fila)
+static void print_fila(size_t b, Fila *fila)
 {
 	int i;
 	Numero *p;
 
 	for (i = 0; i < b; i++) {
-		printf("fila%d: ", i);
-		for (p = fila[i]; p; p = p->prox)
+		printf("fila%d:\t", i);
+		for (p = fila[i].prim; p; p = p->prox)
 			printf(" %s%c", p->numero, p->prox ? ',' : '\0');
 		puts("");
 	}
 	puts("");
 }
 
-void radix(size_t b, Numero **fila, size_t n, size_t d,
-		char **numeros)
+void radix(size_t b, Fila *fila, size_t n, size_t d, char **numeros)
 {
-	int i, j;
+	int i;
 	static it = 0;
 	Numero *p;
 
@@ -193,16 +210,12 @@ void radix(size_t b, Numero **fila, size_t n, size_t d,
 		it++;
 		printf("\nIteracao %d: %da distribuicao\n\n", it, it);
 
-		for (i = 0; i < n; i++)
-			insere_fila(fila, d, numeros[i]);
-		i = 0;
-		for (j = 0; j < b; j++)
-			for (p = fila[j]; p; p = p->prox)
-				numeros[i++] = p->numero;
-
+		insere_fila(fila, n, d, numeros);
 		print_fila(b, fila);
+
+		retira_fila(b, fila, numeros);
 		print_numeros(n, numeros);
-		zera_fila(b, fila);
+
 		radix(b, fila, n, d, numeros);
 	}
 }
