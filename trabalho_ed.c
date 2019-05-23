@@ -174,7 +174,6 @@ static void retira_fila(size_t b, Fila *fila, char **numeros)
 			*numeros++ = tmp->numero;
 			free(tmp);
 		}
-		(*fila).ult = NULL;
 	}
 }
 
