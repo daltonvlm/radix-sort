@@ -120,7 +120,7 @@ Fila *gera_fila(size_t b)
 
 	fila = (Fila *) aloca(b * sizeof(Fila));
 	while (b--)
-		fila[b].prim = fila[b].ult = NULL;
+		fila[b].prim = NULL;
 	return fila;
 }
 
@@ -156,7 +156,7 @@ static void insere_fila(Fila *fila, size_t n, size_t d, char **numeros)
 		p->numero = *numeros;
 		p->prox = NULL;
 
-		if (fila[i].ult)
+		if (fila[i].prim)
 			fila[i].ult->prox = p;
 		else
 			fila[i].prim = p;
